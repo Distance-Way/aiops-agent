@@ -213,3 +213,10 @@ def test_ui_page_served(client):
     response = client.get("/ui/")
     assert response.status_code == 200
     assert "AIOps Agent" in response.text
+
+
+def test_ui_page_includes_jobs_and_workers_tab(client):
+    response = client.get("/ui/")
+    assert response.status_code == 200
+    assert "任务调度" in response.text
+    assert "Worker" in response.text or "节点" in response.text

@@ -29,6 +29,7 @@
       <button :class="{active: activeTab === 'chat'}" @click="activeTab = 'chat'">对话诊断</button>
       <button :class="{active: activeTab === 'kb'}" @click="activeTab = 'kb'">排障手册</button>
       <button :class="{active: activeTab === 'system'}" @click="activeTab = 'system'">系统状态</button>
+      <button :class="{active: activeTab === 'jobs'}" @click="activeTab = 'jobs'">任务调度</button>
     </nav>
 
     <main class="workspace">
@@ -148,6 +149,73 @@
           </div>
         </div>
         <div v-else-if="errorText" class="error-banner">{{ errorText }}</div>
+      </section>
+
+      <section v-if="activeTab === 'jobs'" class="panel jobs-panel">
+        <div class="jobs-head">
+          <h3>Diagnostic Job 调度</h3>
+          <button class="ghost" type="button" @click="loadJobsAndWorkers">刷新</button>
+        </div>
+
+        <div class="jobs-grid">
+          <form class="job-form" @submit.prevent="submitJob">
+            <label>
+              任务类型
+              <select v-model="jobType">
+                <option value="system_status">系统状态</option>
+                <option value="service_check">端口检查</option>
+                <option value="query_logs">日志检索</option>
+                <option value="log_inference">日志分类推理</option>
+              </select>
+            </label>
+            <label>
+              优先级
+              <select v-model="jobPriority">
+                <option value="high">high</option>
+                <option value="normal">normal</option>
+                <option value="low">low</option>
+              </select>
+            </label>
+            <label>
+              参数（文本或端口）
+              <textarea v-model="jobText" rows="3" placeholder="例如：磁盘空间不足 或 8000"></textarea>
+            </label>
+            <button type="submit" :disabled="submittingJob">提交任务</button>
+          </form>
+
+          <div class="job-list">
+            <h4>Jobs（{{ jobs.length }}）</h4>
+            <div v-if="jobs.length === 0" class="empty-tip">暂无任务，提交一个 Diagnostic Job 开始验证调度。</div>
+            <article v-for="job in jobs" :key="job.id" class="job-row">
+              <div class="job-main">
+                <strong>{{ job.type }}</strong>
+                <span class="status-chip" :class="job.status">{{ job.status }}</span>
+              </div>
+              <div class="job-meta">
+                <span>{{ job.priority }} · CPU {{ job.cpu_request }} · {{ job.memory_request_mb }}MB</span>
+                <span v-if="job.worker_id">Worker: {{ job.worker_id }}</span>
+                <span>{{ job.created_at }}</span>
+              </div>
+              <pre v-if="job.result">{{ job.result }}</pre>
+              <p v-if="job.error" class="job-error">{{ job.error }}</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="worker-section">
+          <h4>Workers（{{ workers.length }}）</h4>
+          <div v-if="workers.length === 0" class="empty-tip">暂无在线 Worker，请先启动 Worker 进程。</div>
+          <div class="worker-row" v-for="worker in workers" :key="worker.id">
+            <div>
+              <strong>{{ worker.name }}</strong>
+              <span>{{ worker.id }}</span>
+            </div>
+            <span>{{ worker.status }}</span>
+            <span>CPU {{ worker.cpu_capacity }}</span>
+            <span>{{ worker.memory_capacity_mb }} MB</span>
+            <span>心跳 {{ worker.last_heartbeat_at }}</span>
+          </div>
+        </div>
       </section>
     </main>
   </div>

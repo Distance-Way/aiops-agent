@@ -14,12 +14,19 @@ createApp({
       documents: [],
       uploading: false,
       status: null,
+      jobs: [],
+      workers: [],
+      jobType: "system_status",
+      jobPriority: "normal",
+      jobText: "",
+      submittingJob: false,
     };
   },
   mounted() {
     this.refreshSessions();
     this.loadDocuments();
     this.loadStatus();
+    this.loadJobsAndWorkers();
   },
   methods: {
     rememberKey() {
@@ -155,6 +162,61 @@ createApp({
         this.errorText = "";
       } catch (error) {
         this.errorText = error.message;
+      }
+    },
+    async loadJobsAndWorkers() {
+      try {
+        const headers = this.headers();
+        const [jobs, workers] = await Promise.all([
+          this.request("/api/jobs", { headers }),
+          this.request("/api/workers", { headers }),
+        ]);
+        this.jobs = jobs;
+        this.workers = workers;
+        this.errorText = "";
+      } catch (error) {
+        this.errorText = error.message;
+      }
+    },
+    buildJobPayload() {
+      if (this.jobType === "service_check") {
+        const port = Number.parseInt(this.jobText, 10);
+        return { port: Number.isFinite(port) ? port : 8000 };
+      }
+      if (this.jobType === "query_logs") {
+        return {
+          keyword: this.jobText.trim() || "ERROR",
+          max_lines: 20,
+          since_minutes: 60,
+        };
+      }
+      if (this.jobType === "log_inference") {
+        return { text: this.jobText.trim() };
+      }
+      return {};
+    },
+    async submitJob() {
+      if (this.submittingJob) return;
+      this.submittingJob = true;
+      this.errorText = "";
+      try {
+        await this.request("/api/jobs", {
+          method: "POST",
+          headers: this.headers(true),
+          body: JSON.stringify({
+            type: this.jobType,
+            priority: this.jobPriority,
+            cpu_request: 1,
+            memory_request_mb: 256,
+            payload: this.buildJobPayload(),
+          }),
+        });
+        this.jobText = "";
+        await this.loadJobsAndWorkers();
+      } catch (error) {
+        this.errorText = error.message;
+      } finally {
+        this.submittingJob = false;
       }
     },
   },

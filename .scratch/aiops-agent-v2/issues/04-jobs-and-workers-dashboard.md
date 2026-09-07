@@ -4,8 +4,12 @@
 
 **Blocked by:** 02 — Scheduling and Job Lifecycle
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Jobs view lists status and can submit a new job.
-- [ ] Workers view shows name, capacity and heartbeat state.
-- [ ] Existing conversation and knowledge base views still work.
+- [x] Jobs view lists status and can submit a new job.
+- [x] Workers view shows name, capacity and heartbeat state.
+- [x] Existing conversation and knowledge base views still work.
+
+## Answer
+
+Added a Vue task scheduling view with Diagnostic Job submission/list and Worker status cards; existing UI tabs remain covered by serving tests.
