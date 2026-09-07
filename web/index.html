@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIOps Agent</title>
+  <link rel="stylesheet" href="/ui/assets/style.css">
+</head>
+<body>
+  <div id="app" v-cloak>
+    <header class="topbar">
+      <div class="brand">
+        <strong>AIOps Agent</strong>
+        <span>智能运维诊断与监控服务</span>
+      </div>
+      <div class="key-row">
+        <input
+          v-model.trim="apiKey"
+          type="password"
+          placeholder="X-API-Key"
+          @change="rememberKey"
+          aria-label="API Key"
+        >
+        <button class="ghost" type="button" @click="rememberKey">保存 Key</button>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="功能切换">
+      <button :class="{active: activeTab === 'chat'}" @click="activeTab = 'chat'">对话诊断</button>
+      <button :class="{active: activeTab === 'kb'}" @click="activeTab = 'kb'">排障手册</button>
+      <button :class="{active: activeTab === 'system'}" @click="activeTab = 'system'">系统状态</button>
+    </nav>
+
+    <main class="workspace">
+      <section v-if="activeTab === 'chat'" class="panel chat-panel">
+        <div class="chat-head">
+          <label>会话</label>
+          <select v-model="currentSessionId" @change="loadMessages">
+            <option value="">新会话</option>
+            <option v-for="item in sessions" :key="item.id" :value="item.id">
+              {{ item.title }} · {{ item.updated_at }}
+            </option>
+          </select>
+          <button class="ghost" type="button" @click="startNewSession">新建会话</button>
+        </div>
+
+        <div class="chat-log" ref="chatLog">
+          <div v-if="messages.length === 0" class="empty-tip">
+            输入一个问题，例如“查看服务器状态”或“查询日志中的 ERROR”。
+          </div>
+          <article
+            v-for="(item, index) in messages"
+            :key="index"
+            class="message"
+            :class="item.role"
+          >
+            <div class="bubble">{{ item.content }}</div>
+            <div v-if="item.role === 'assistant' && item.tools" class="meta">
+              <span v-for="tool in item.tools" :key="tool.name" class="chip tool-chip">
+                {{ tool.name }}
+              </span>
+              <span v-for="source in item.sources" :key="source" class="chip source-chip">
+                来源：{{ source }}
+              </span>
+            </div>
+          </article>
+          <div v-if="loading" class="message assistant">
+            <div class="bubble">Agent 正在调用工具分析，请稍候…</div>
+          </div>
+          <div v-if="errorText" class="error-banner">{{ errorText }}</div>
+        </div>
+
+        <form class="composer" @submit.prevent="sendMessage">
+          <textarea
+            v-model="input"
+            rows="3"
+            placeholder="描述服务器状态、日志错误或故障问题…"
+            @keydown.enter.exact.prevent="sendMessage"
+          ></textarea>
+          <button type="submit" :disabled="loading || !input.trim()">发送</button>
+        </form>
+      </section>
+
+      <section v-if="activeTab === 'kb'" class="panel kb-panel">
+        <div class="kb-layout">
+          <div class="upload-box">
+            <h3>上传排障手册</h3>
+            <p>支持 Markdown / TXT，内容会分块并建立本地检索索引。</p>
+            <input
+              id="manualFile"
+              type="file"
+              accept=".md,.txt,.markdown"
+              @change="uploadManual"
+            >
+            <label class="file-button" for="manualFile">
+              {{ uploading ? '上传中…' : '选择文件上传' }}
+            </label>
+          </div>
+          <div class="doc-list">
+            <h3>已上传手册（{{ documents.length }}）</h3>
+            <div v-if="documents.length === 0" class="empty-tip">暂无手册，先上传一份排障文档。</div>
+            <div v-for="doc in documents" :key="doc.id" class="doc-row">
+              <div>
+                <strong>{{ doc.name }}</strong>
+                <span>{{ doc.chunk_count }} 个片段 · {{ doc.created_at }}</span>
+              </div>
+              <button class="danger" type="button" @click="removeDocument(doc.id)">删除</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="activeTab === 'system'" class="panel status-panel">
+        <div class="status-actions">
+          <h3>服务器实时状态</h3>
+          <button class="ghost" type="button" @click="loadStatus">刷新</button>
+        </div>
+        <div v-if="status" class="metrics-grid">
+          <div class="metric">
+            <span>CPU</span>
+            <strong>{{ status.cpu_percent }}%</strong>
+            <small>{{ status.cpu_count }} 逻辑核心</small>
+          </div>
+          <div class="metric">
+            <span>内存</span>
+            <strong>{{ status.memory.percent }}%</strong>
+            <small>{{ status.memory.used_mb }} / {{ status.memory.total_mb }} MB</small>
+          </div>
+          <div class="metric">
+            <span>磁盘</span>
+            <strong>{{ status.disk.percent }}%</strong>
+            <small>{{ status.disk.path }} · {{ status.disk.used_gb }} GB</small>
+          </div>
+          <div class="metric">
+            <span>进程</span>
+            <strong>{{ status.process.cpu_percent }}%</strong>
+            <small>PID {{ status.process.pid }} · {{ status.process.threads }} 线程</small>
+          </div>
+          <div class="metric wide">
+            <span>GPU</span>
+            <strong>{{ status.gpu.available ? '可用' : '未检测到' }}</strong>
+            <small>{{ status.gpu.devices.length }} 个设备</small>
+          </div>
+          <div class="metric wide">
+            <span>主机</span>
+            <strong>{{ status.hostname }}</strong>
+            <small>{{ status.platform }}</small>
+          </div>
+        </div>
+        <div v-else-if="errorText" class="error-banner">{{ errorText }}</div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/ui/vendor/vue.global.prod.js"></script>
+  <script src="/ui/assets/app.js"></script>
+</body>
+</html>
