@@ -15,9 +15,42 @@ from app.rag import RagService
 class ToolExecution:
     output: str
     sources: list[str]
+    status: str = "success"
 
 
-ToolHandler = Callable[..., str]
+ToolHandler = Callable[..., str | ToolExecution]
+
+
+_TYPE_CHECKS = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+}
+
+
+def _validate_arguments(
+    parameters: dict[str, Any], arguments: dict[str, Any]
+) -> str | None:
+    properties = parameters.get("properties") or {}
+    unknown = sorted(set(arguments) - set(properties))
+    if unknown:
+        return f"包含未声明参数：{', '.join(unknown)}"
+    for required in parameters.get("required") or []:
+        if required not in arguments:
+            return f"缺少必需参数：{required}"
+    for name, value in arguments.items():
+        expected = (properties.get(name) or {}).get("type")
+        if not expected:
+            continue
+        type_check = _TYPE_CHECKS.get(expected)
+        if type_check is None:
+            continue
+        if value is None or (isinstance(value, bool) and expected != "boolean"):
+            return f"参数 {name} 必须是 {expected}"
+        if not isinstance(value, type_check):
+            return f"参数 {name} 必须是 {expected}"
+    return None
 
 
 def _truncate(text: str, limit: int | None = None) -> str:
@@ -68,15 +101,23 @@ def _query_logs(
     return f"共找到 {len(matches)} 条匹配日志：\n{body}"
 
 
-def _search_runbook(query: str, rag: RagService, top_k: int = 3) -> str:
+def _search_runbook(
+    query: str, rag: RagService, top_k: int = 3
+) -> ToolExecution:
     hits = rag.search(query, top_k=top_k)
     if not hits:
-        return "知识库中暂无排障手册，请先上传 Markdown/TXT 文档"
+        return ToolExecution(
+            output="知识库中暂无排障手册，请先上传 Markdown/TXT 文档",
+            sources=[],
+        )
     parts = [
         f"[{index}] 来源：{hit.document_name}（相似度 {hit.score}）\n{hit.content}"
         for index, hit in enumerate(hits, start=1)
     ]
-    return "\n\n".join(parts)
+    return ToolExecution(
+        output="\n\n".join(parts),
+        sources=[hit.document_name for hit in hits],
+    )
 
 
 class ToolRegistry:
@@ -189,25 +230,43 @@ class ToolRegistry:
     async def execute(self, name: str, arguments: dict[str, Any]) -> ToolExecution:
         spec = self._tools.get(name)
         if not spec:
-            return ToolExecution(output=f"未注册工具：{name}", sources=[])
+            return ToolExecution(
+                output=f"未注册工具：{name}",
+                sources=[],
+                status="error",
+            )
+        validation_error = _validate_arguments(spec["parameters"], arguments)
+        if validation_error:
+            return ToolExecution(
+                output=f"工具参数校验失败：{validation_error}",
+                sources=[],
+                status="error",
+            )
         handler: ToolHandler = spec["handler"]
         try:
-            output = await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 asyncio.to_thread(handler, **arguments),
                 timeout=settings.tool_timeout_seconds,
             )
-            sources: list[str] = []
-            if name == "search_runbook" and self._rag is not None:
-                query = str(arguments.get("query") or "")
-                sources = [
-                    hit.document_name
-                    for hit in self._rag.search(query, top_k=int(arguments.get("top_k") or 3))
-                ]
-            return ToolExecution(output=_truncate(output), sources=list(dict.fromkeys(sources)))
+            if isinstance(result, ToolExecution):
+                execution = result
+            else:
+                execution = ToolExecution(output=result, sources=[])
+            execution.output = _truncate(execution.output)
+            execution.sources = list(dict.fromkeys(execution.sources))
+            return execution
         except asyncio.TimeoutError:
             return ToolExecution(
                 output=f"工具执行超时（超过 {settings.tool_timeout_seconds:.1f} 秒）",
                 sources=[],
+                status="error",
             )
         except Exception as exc:  # pragma: no cover - defensive boundary
-            return ToolExecution(output=f"工具执行失败：{exc}", sources=[])
+            return ToolExecution(
+                output=f"工具执行失败：{exc}",
+                sources=[],
+                status="error",
+            )
+
+    def has(self, name: str) -> bool:
+        return name in self._tools

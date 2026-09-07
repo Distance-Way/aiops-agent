@@ -5,30 +5,19 @@ from time import perf_counter
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app import api, db
 from app.agent import AgentEngine
 from app.config import settings
 from app.logging_config import get_logger, setup_logging
+from app.metrics import HTTP_REQUEST_DURATION, HTTP_REQUESTS_TOTAL
 from app.rag import RagService
 
 
 db.init_db()
 setup_logging(settings.log_file_path)
 logger = get_logger()
-
-
-HTTP_REQUESTS_TOTAL = Counter(
-    "http_requests_total",
-    "HTTP requests processed",
-    ["method", "path", "status"],
-)
-HTTP_REQUEST_DURATION = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request duration in seconds",
-    ["method", "path"],
-)
 
 
 @asynccontextmanager

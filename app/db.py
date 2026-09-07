@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS tool_runs (
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_tool_runs_session ON tool_runs(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at);
 """
 
 

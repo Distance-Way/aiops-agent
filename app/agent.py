@@ -8,6 +8,12 @@ import httpx
 
 from app import db
 from app.config import settings
+from app.logging_config import get_logger
+from app.metrics import (
+    AGENT_LOOP_STEPS_TOTAL,
+    AGENT_TOOL_CALLS_TOTAL,
+    AI_CHAT_REQUESTS_TOTAL,
+)
 from app.rag import RagService
 from app.schemas import ChatResponse, ToolCallResult
 from app.tools import ToolRegistry
@@ -18,6 +24,8 @@ SYSTEM_PROMPT = (
     "当用户询问系统状态、日志、服务端口或排障手册时，优先调用可用工具获取事实，"
     "再根据工具结果给出简洁、可执行的中文回答。若工具结果不足，请如实说明，不要编造。"
 )
+
+logger = get_logger()
 
 
 @dataclass(frozen=True)
@@ -244,6 +252,15 @@ class AgentEngine:
         started = perf_counter()
         session = db.get_or_create_session(session_id)
         sid = session["id"]
+        AI_CHAT_REQUESTS_TOTAL.inc()
+        logger.info(
+            "agent chat started",
+            extra={
+                "session_id": sid,
+                "provider": getattr(self.llm, "provider", "mock"),
+                "model": getattr(self.llm, "model", "mock"),
+            },
+        )
         history_rows = db.get_messages(sid)
         history = [
             {"role": row["role"], "content": row["content"]}
@@ -267,6 +284,7 @@ class AgentEngine:
             except Exception as exc:
                 final_reply = f"模型调用失败：{exc}"
                 break
+            AGENT_LOOP_STEPS_TOTAL.inc()
 
             if not result.tool_calls:
                 final_reply = result.content or "未生成回答，请换一种方式描述问题。"
@@ -300,7 +318,20 @@ class AgentEngine:
                 tool_started = perf_counter()
                 execution = await self.tools.execute(call.name, call.arguments)
                 duration_ms = round((perf_counter() - tool_started) * 1000, 2)
-                status = "success" if not execution.output.startswith("工具执行失败") else "error"
+                status = execution.status
+                metric_tool = (
+                    call.name if self.tools.has(call.name) else "unregistered"
+                )
+                AGENT_TOOL_CALLS_TOTAL.labels(metric_tool, status).inc()
+                logger.info(
+                    "agent tool executed",
+                    extra={
+                        "session_id": sid,
+                        "tool": metric_tool,
+                        "tool_status": status,
+                        "duration_ms": duration_ms,
+                    },
+                )
                 db.add_tool_run(
                     session_id=sid,
                     name=call.name,
@@ -333,6 +364,18 @@ class AgentEngine:
                 "请缩小问题范围或补充更具体的错误信息。"
             )
         db.add_message(sid, "assistant", final_reply)
+        latency_ms = round((perf_counter() - started) * 1000, 2)
+        logger.info(
+            "agent chat completed",
+            extra={
+                "session_id": sid,
+                "tool_count": len(events),
+                "source_count": len(sources),
+                "latency_ms": latency_ms,
+                "provider": getattr(self.llm, "provider", "mock"),
+                "model": getattr(self.llm, "model", "mock"),
+            },
+        )
         return ChatResponse(
             session_id=sid,
             reply=final_reply,
@@ -340,5 +383,5 @@ class AgentEngine:
             sources=list(dict.fromkeys(sources)),
             provider=getattr(self.llm, "provider", "mock"),
             model=getattr(self.llm, "model", "mock"),
-            latency_ms=round((perf_counter() - started) * 1000, 2),
+            latency_ms=latency_ms,
         )

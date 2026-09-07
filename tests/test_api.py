@@ -44,6 +44,23 @@ def test_chat_time_tool(client, headers):
     assert "get_current_time" in names
 
 
+def test_agent_metrics_exposed_after_chat(client, headers):
+    response = client.post(
+        "/api/chat",
+        json={"message": "现在几点", "use_rag": False},
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+    metrics = client.get("/metrics")
+    assert metrics.status_code == 200
+    assert "ai_chat_requests_total" in metrics.text
+    assert "agent_loop_steps_total" in metrics.text
+    assert "agent_tool_calls_total{" in metrics.text
+    assert 'tool="get_current_time"' in metrics.text
+    assert 'status="success"' in metrics.text
+
+
 def test_chat_system_status_tool(client, headers):
     response = client.post(
         "/api/chat",
