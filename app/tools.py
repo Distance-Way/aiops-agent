@@ -70,6 +70,23 @@ def _get_system_status() -> str:
     return json.dumps(status, ensure_ascii=False)
 
 
+def _log_line_within_window(line: str, cutoff_epoch: float) -> bool:
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError:
+        return True
+    ts = record.get("ts") if isinstance(record, dict) else None
+    if not isinstance(ts, str):
+        return True
+    try:
+        parsed = datetime.fromisoformat(ts)
+    except ValueError:
+        return True
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp() >= cutoff_epoch
+
+
 def _check_service(port: int | None = None) -> str:
     target_port = port or 8000
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -93,7 +110,13 @@ def _query_logs(
         return f"日志文件不存在：{path}"
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     lines = lines[-max(1000, max_lines * 50) :]
-    matches = [line for line in lines if keyword.lower() in line.lower()]
+    cutoff_epoch = datetime.now(timezone.utc).timestamp() - since_minutes * 60
+    matches = [
+        line
+        for line in lines
+        if keyword.lower() in line.lower()
+        and _log_line_within_window(line, cutoff_epoch)
+    ]
     matches = matches[-max_lines:]
     if not matches:
         return f"最近 {since_minutes} 分钟内未找到包含 {keyword!r} 的日志"

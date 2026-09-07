@@ -1,4 +1,6 @@
+import json
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -93,6 +95,43 @@ def test_chat_log_tool(client, headers):
     names = [tool["name"] for tool in payload["tools_executed"]]
     assert "query_logs" in names
     assert "database timeout" in payload["reply"]
+
+
+def test_chat_log_tool_respects_recent_window(client, headers):
+    now = datetime.now(timezone.utc)
+    recent = now - timedelta(minutes=1)
+    old = now - timedelta(hours=2)
+    log_path = Path(os.environ["LOG_FILE_PATH"])
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        json.dumps(
+            {
+                "ts": old.isoformat(),
+                "level": "ERROR",
+                "message": "database timeout from old window",
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "ts": recent.isoformat(),
+                "level": "ERROR",
+                "message": "database timeout from recent window",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={"message": "查询日志中的 ERROR", "use_rag": False},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "database timeout from recent window" in payload["reply"]
+    assert "database timeout from old window" not in payload["reply"]
 
 
 def test_chat_rag_runbook(client, headers, sample_runbook):
