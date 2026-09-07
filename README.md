@@ -13,6 +13,9 @@ AIOps Agent 是一个面向服务器与日志排障场景的智能运维诊断�
 - API Key 鉴权与限流
 - 结构化日志与 Prometheus 指标
 - Vue 3 演示前端（对话、知识库、系统状态）
+- Worker 注册、心跳、容量上报与 Diagnostic Job 调度
+- Worker 轮询执行系统状态、日志、端口与日志分类推理任务
+- Kubernetes 清单、Grafana 面板与任务/Worker 队列指标
 - pytest 自动化测试、Docker 与 GitHub Actions CI
 
 ## 项目结构
@@ -104,7 +107,42 @@ docker compose up --build
 
 默认访问 <http://127.0.0.1:8000/ui/>。
 
+Compose 会启动 `agent`（控制面 + API）、`worker`（调度执行者）、`prometheus` 与 `grafana`。Grafana 默认地址 <http://127.0.0.1:3000>，已自动接入 Prometheus 与 v2 面板。
+
+## 任务调度 API
+
+Worker 注册：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/workers \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-key-change-me" \
+  -d '{"name":"worker-a","cpu_capacity":2,"memory_capacity_mb":2048}'
+```
+
+提交一个日志分类推理 Job：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/jobs \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-key-change-me" \
+  -d '{"type":"log_inference","priority":"normal","cpu_request":1,"memory_request_mb":256,"payload":{"text":"disk full"}}'
+```
+
+Job 列表：`GET /api/jobs`。任务调度页面位于 Vue 前端的“任务调度”Tab。
+
+## Kubernetes（Kind）
+
+```bash
+docker build -t aiops-agent:local .
+kind create cluster --config deploy/k8s/kind-config.yaml
+kind load docker-image aiops-agent:local
+kubectl apply -f deploy/k8s/
+kubectl port-forward -n aiops-agent svc/aiops-agent-api 8000:8000
+```
+
 ## 设计文档
 
 - 需求规格：`docs/01-requirements.md`
 - 系统设计：`docs/02-system-design.md`
+- v2 调度设计：`docs/03-v2-design.md`

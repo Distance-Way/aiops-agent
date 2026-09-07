@@ -1,4 +1,4 @@
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 
 HTTP_REQUESTS_TOTAL = Counter(
@@ -23,4 +23,22 @@ AGENT_LOOP_STEPS_TOTAL = Counter(
 AI_CHAT_REQUESTS_TOTAL = Counter(
     "ai_chat_requests_total",
     "Chat requests handled by the agent",
+)
+
+AIOPS_WORKERS_ACTIVE = Gauge(
+    "aiops_workers_active",
+    "Workers currently registered as active",
+)
+AIOPS_DIAGNOSTIC_JOBS_QUEUED = Gauge(
+    "aiops_diagnostic_jobs_queued",
+    "Diagnostic jobs currently queued",
+)
+AIOPS_DIAGNOSTIC_JOBS_RUNNING = Gauge(
+    "aiops_diagnostic_jobs_running",
+    "Diagnostic jobs currently running",
+)
+AIOPS_DIAGNOSTIC_JOB_COMPLETIONS_TOTAL = Counter(
+    "aiops_diagnostic_job_completions_total",
+    "Diagnostic jobs completed",
+    ["status"],
 )

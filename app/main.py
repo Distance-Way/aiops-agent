@@ -11,7 +11,13 @@ from app import api, db
 from app.agent import AgentEngine
 from app.config import settings
 from app.logging_config import get_logger, setup_logging
-from app.metrics import HTTP_REQUEST_DURATION, HTTP_REQUESTS_TOTAL
+from app.metrics import (
+    AIOPS_DIAGNOSTIC_JOBS_QUEUED,
+    AIOPS_DIAGNOSTIC_JOBS_RUNNING,
+    AIOPS_WORKERS_ACTIVE,
+    HTTP_REQUEST_DURATION,
+    HTTP_REQUESTS_TOTAL,
+)
 from app.rag import RagService
 
 
@@ -81,6 +87,9 @@ def create_app() -> FastAPI:
 
     @application.get("/metrics", tags=["system"])
     def metrics():
+        AIOPS_WORKERS_ACTIVE.set(db.count_active_workers())
+        AIOPS_DIAGNOSTIC_JOBS_QUEUED.set(db.count_diagnostic_jobs("queued"))
+        AIOPS_DIAGNOSTIC_JOBS_RUNNING.set(db.count_diagnostic_jobs("running"))
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     web_dir = Path(__file__).resolve().parent.parent / "web"

@@ -425,6 +425,26 @@ def list_jobs(limit: int = 50) -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def count_diagnostic_jobs(status: str | None = None) -> int:
+    with connection() as conn:
+        if status is None:
+            row = conn.execute("SELECT COUNT(*) AS count FROM diagnostic_jobs").fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) AS count FROM diagnostic_jobs WHERE status = ?",
+                (status,),
+            ).fetchone()
+    return int(row["count"])
+
+
+def count_active_workers() -> int:
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS count FROM workers WHERE status = 'active'"
+        ).fetchone()
+    return int(row["count"])
+
+
 def get_job(job_id: str) -> sqlite3.Row | None:
     with connection() as conn:
         return conn.execute(

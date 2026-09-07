@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from app import db, scheduling
+from app.metrics import AIOPS_DIAGNOSTIC_JOB_COMPLETIONS_TOTAL
 from app.rag import RagService
 from app.schemas import (
     ChatRequest,
@@ -71,6 +72,7 @@ def worker_complete(worker_id: str, payload: JobComplete):
         error=payload.error,
     ):
         raise HTTPException(status_code=409, detail="Diagnostic Job 当前不可完成")
+    AIOPS_DIAGNOSTIC_JOB_COMPLETIONS_TOTAL.labels(payload.status).inc()
     return _job_out(db.get_job(payload.job_id))
 
 

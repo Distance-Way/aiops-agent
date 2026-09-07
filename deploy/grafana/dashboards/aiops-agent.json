@@ -1,0 +1,31 @@
+{
+  "title": "AIOps Agent v2",
+  "uid": "aiops-agent-v2",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Active Workers",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "aiops_workers_active"}]
+    },
+    {
+      "type": "stat",
+      "title": "Queued Jobs",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "aiops_diagnostic_jobs_queued"}]
+    },
+    {
+      "type": "stat",
+      "title": "Running Jobs",
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "aiops_diagnostic_jobs_running"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Job Completions",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "targets": [{"expr": "sum by (status) (rate(aiops_diagnostic_job_completions_total[1m]))"}]
+    }
+  ]
+}

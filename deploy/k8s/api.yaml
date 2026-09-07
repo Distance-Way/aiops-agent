@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-agent-api
+  namespace: aiops-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-agent-api
+  template:
+    metadata:
+      labels:
+        app: aiops-agent-api
+    spec:
+      containers:
+        - name: api
+          image: aiops-agent:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: aiops-agent-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aiops-agent-api
+  namespace: aiops-agent
+spec:
+  selector:
+    app: aiops-agent-api
+  ports:
+    - port: 8000
+      targetPort: 8000

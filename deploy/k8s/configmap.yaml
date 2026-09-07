@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiops-agent-config
+  namespace: aiops-agent
+data:
+  APP_API_KEY: "dev-key-change-me"
+  LLM_PROVIDER: "mock"
+  DATABASE_PATH: "/app/data/agent.db"
+  LOG_FILE_PATH: "/app/logs/agent.log"
+  WORKER_TTL_SECONDS: "60"
