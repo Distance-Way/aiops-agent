@@ -54,7 +54,7 @@ def test_chat_system_status_tool(client, headers):
     payload = response.json()
     names = [tool["name"] for tool in payload["tools_executed"]]
     assert "get_system_status" in names
-    assert "工具执行结果" in payload["reply"]
+    assert "系统状态诊断" in payload["reply"]
 
 
 def test_chat_log_tool(client, headers):

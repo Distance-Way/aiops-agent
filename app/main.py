@@ -57,13 +57,33 @@ def create_app() -> FastAPI:
             response = await call_next(request)
         except Exception:
             status_code = 500
+            duration_ms = round((perf_counter() - started) * 1000, 2)
             HTTP_REQUESTS_TOTAL.labels(request.method, request.url.path, str(status_code)).inc()
+            logger.error(
+                "http request failed",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": status_code,
+                    "duration_ms": duration_ms,
+                },
+            )
             raise
         duration = max(perf_counter() - started, 0)
+        duration_ms = round(duration * 1000, 2)
         HTTP_REQUESTS_TOTAL.labels(
             request.method, request.url.path, str(response.status_code)
         ).inc()
         HTTP_REQUEST_DURATION.labels(request.method, request.url.path).observe(duration)
+        logger.info(
+            "http request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
         return response
 
     @application.get("/healthz", tags=["system"])

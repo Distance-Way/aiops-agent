@@ -45,8 +45,16 @@ class MockLLM:
     ) -> LLMResult:
         if messages and messages[-1].get("role") == "tool":
             output = messages[-1].get("content", "")
+            tool_name = ""
+            if len(messages) >= 2 and messages[-2].get("role") == "assistant":
+                for item in messages[-2].get("tool_calls") or []:
+                    function = item.get("function") or {}
+                    if item.get("id") == messages[-1].get("tool_call_id"):
+                        tool_name = function.get("name", "")
+                        break
+                    tool_name = tool_name or function.get("name", "")
             return LLMResult(
-                content=f"好的，工具执行结果如下：\n{output}",
+                content=self._format_tool_answer(tool_name, output),
                 tool_calls=[],
                 model=self.model,
                 provider=self.provider,
@@ -103,6 +111,50 @@ class MockLLM:
             if message.get("role") == "user":
                 return str(message.get("content", ""))
         return ""
+
+    @staticmethod
+    def _format_tool_answer(tool_name: str, output: str) -> str:
+        text = output.strip()
+        if tool_name == "get_current_time":
+            return text
+        if tool_name == "check_service":
+            return text
+        if tool_name == "get_system_status":
+            try:
+                data = json.loads(text)
+                memory = data["memory"]
+                disk = data["disk"]
+                process = data["process"]
+                suggestions: list[str] = []
+                if data["cpu_percent"] >= 80:
+                    suggestions.append("CPU 负载较高，建议排查占用最高的进程")
+                if memory["percent"] >= 85:
+                    suggestions.append("内存占用较高，建议检查内存泄漏或扩容")
+                if disk["percent"] >= 85:
+                    suggestions.append("磁盘空间不足，建议清理日志或扩容")
+                detail = (
+                    f"CPU {data['cpu_percent']}%（{data['cpu_count']} 核），"
+                    f"内存 {memory['percent']}%（{memory['used_mb']}/{memory['total_mb']} MB），"
+                    f"磁盘 {disk['percent']}%（{disk['path']}），"
+                    f"进程 PID {process['pid']}，线程数 {process['threads']}"
+                )
+                advice = "；".join(suggestions) if suggestions else "整体运行正常，无需立即处理"
+                return f"系统状态诊断：{detail}。建议：{advice}。"
+            except (ValueError, KeyError, TypeError):
+                return f"系统状态工具返回：\n{text}"
+        if tool_name == "query_logs":
+            return (
+                "日志诊断结果如下：\n"
+                f"{text}\n"
+                "建议：优先查看错误时间点前后的完整上下文，并结合最近发布或配置变更定位根因。"
+            )
+        if tool_name == "search_runbook":
+            return (
+                "已依据排障手册检索到处置步骤：\n"
+                f"{text}\n"
+                "建议按手册顺序执行，并在每一步后确认服务状态是否恢复。"
+            )
+        return f"工具执行结果：\n{text}"
 
 
 class OpenAICompatibleLLM:

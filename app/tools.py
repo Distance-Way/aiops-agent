@@ -1,9 +1,10 @@
+import asyncio
 import json
 import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from app.config import settings
 from app.monitoring import get_system_status
@@ -16,7 +17,7 @@ class ToolExecution:
     sources: list[str]
 
 
-ToolHandler = Callable[..., Awaitable[str]]
+ToolHandler = Callable[..., str]
 
 
 def _truncate(text: str, limit: int | None = None) -> str:
@@ -26,17 +27,17 @@ def _truncate(text: str, limit: int | None = None) -> str:
     return text[:max_length] + f"\n...[输出过长，已截断，共 {len(text)} 字符]"
 
 
-async def _get_current_time() -> str:
+def _get_current_time() -> str:
     now = datetime.now(timezone.utc).astimezone()
     return f"当前时间：{now.strftime('%Y-%m-%d %H:%M:%S')}（{now.tzname()}）"
 
 
-async def _get_system_status() -> str:
+def _get_system_status() -> str:
     status = get_system_status()
     return json.dumps(status, ensure_ascii=False)
 
 
-async def _check_service(port: int | None = None) -> str:
+def _check_service(port: int | None = None) -> str:
     target_port = port or 8000
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(1.0)
@@ -51,7 +52,7 @@ async def _check_service(port: int | None = None) -> str:
         sock.close()
 
 
-async def _query_logs(
+def _query_logs(
     keyword: str = "ERROR", max_lines: int = 20, since_minutes: int = 60
 ) -> str:
     path = Path(settings.log_file_path)
@@ -67,7 +68,7 @@ async def _query_logs(
     return f"共找到 {len(matches)} 条匹配日志：\n{body}"
 
 
-async def _search_runbook(query: str, rag: RagService, top_k: int = 3) -> str:
+def _search_runbook(query: str, rag: RagService, top_k: int = 3) -> str:
     hits = rag.search(query, top_k=top_k)
     if not hits:
         return "知识库中暂无排障手册，请先上传 Markdown/TXT 文档"
@@ -189,9 +190,12 @@ class ToolRegistry:
         spec = self._tools.get(name)
         if not spec:
             return ToolExecution(output=f"未注册工具：{name}", sources=[])
-        handler: Callable[..., Awaitable[str]] = spec["handler"]
+        handler: ToolHandler = spec["handler"]
         try:
-            output = await handler(**arguments)
+            output = await asyncio.wait_for(
+                asyncio.to_thread(handler, **arguments),
+                timeout=settings.tool_timeout_seconds,
+            )
             sources: list[str] = []
             if name == "search_runbook" and self._rag is not None:
                 query = str(arguments.get("query") or "")
@@ -200,5 +204,10 @@ class ToolRegistry:
                     for hit in self._rag.search(query, top_k=int(arguments.get("top_k") or 3))
                 ]
             return ToolExecution(output=_truncate(output), sources=list(dict.fromkeys(sources)))
+        except asyncio.TimeoutError:
+            return ToolExecution(
+                output=f"工具执行超时（超过 {settings.tool_timeout_seconds:.1f} 秒）",
+                sources=[],
+            )
         except Exception as exc:  # pragma: no cover - defensive boundary
             return ToolExecution(output=f"工具执行失败：{exc}", sources=[])
