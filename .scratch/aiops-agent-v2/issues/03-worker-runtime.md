@@ -4,9 +4,13 @@
 
 **Blocked by:** 02 — Scheduling and Job Lifecycle
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Worker command registers with API and runs a polling loop.
-- [ ] Job types system_status, service_check and query_logs execute through existing controlled tool logic.
-- [ ] log_inference jobs execute through the local deterministic model.
-- [ ] Worker handles execution errors and reports a failed job result.
+- [x] Worker command registers with API and runs a polling loop.
+- [x] Job types system_status, service_check and query_logs execute through existing controlled tool logic.
+- [x] log_inference jobs execute through the local deterministic model.
+- [x] Worker handles execution errors and reports a failed job result.
+
+## Answer
+
+Implemented an HTTP Control Plane client, a WorkerRuntime polling loop and a controlled diagnostic executor with an offline log classifier; executor and success/failure result paths are covered by tests.

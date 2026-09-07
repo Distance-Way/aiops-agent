@@ -36,6 +36,16 @@ class Settings:
     tool_output_limit: int = _env_int("TOOL_OUTPUT_LIMIT", 2000)
     tool_timeout_seconds: float = float(os.getenv("TOOL_TIMEOUT_SECONDS", "5"))
     worker_ttl_seconds: float = float(os.getenv("WORKER_TTL_SECONDS", "60"))
+    control_plane_url: str = os.getenv("CONTROL_PLANE_URL", "http://127.0.0.1:8000")
+    worker_name: str = os.getenv("WORKER_NAME", "worker-1")
+    worker_cpu_capacity: float = float(os.getenv("WORKER_CPU_CAPACITY", "2"))
+    worker_memory_mb: int = _env_int("WORKER_MEMORY_MB", 2048)
+    worker_heartbeat_interval_seconds: float = float(
+        os.getenv("WORKER_HEARTBEAT_INTERVAL_SECONDS", "10")
+    )
+    worker_poll_interval_seconds: float = float(
+        os.getenv("WORKER_POLL_INTERVAL_SECONDS", "1")
+    )
     chunk_size: int = _env_int("CHUNK_SIZE", 400)
     chunk_overlap: int = _env_int("CHUNK_OVERLAP", 60)
 
