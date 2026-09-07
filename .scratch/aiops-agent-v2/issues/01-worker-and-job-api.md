@@ -4,9 +4,13 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Worker registration endpoint stores id/name/capacity and returns the Worker.
-- [ ] Job submission endpoint accepts type, priority, resource requests and payload.
-- [ ] Job list and detail endpoints expose status and timestamps.
-- [ ] Existing Agent chat tests still pass.
+- [x] Worker registration endpoint stores id/name/capacity and returns the Worker.
+- [x] Job submission endpoint accepts type, priority, resource requests and payload.
+- [x] Job list and detail endpoints expose status and timestamps.
+- [x] Existing Agent chat tests still pass.
+
+## Answer
+
+Implemented Worker registration/list and Diagnostic Job create/list/detail HTTP endpoints with SQLite persistence and HTTP-level tests.

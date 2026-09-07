@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from app import db
@@ -6,17 +8,67 @@ from app.schemas import (
     ChatRequest,
     ChatResponse,
     DocumentOut,
+    JobCreate,
+    JobOut,
     MessageOut,
     SearchRequest,
     SearchResponse,
     SessionCreate,
     SessionOut,
     ToolInfo,
+    WorkerOut,
+    WorkerRegister,
 )
 from app.security import require_api_key
 
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_api_key)])
+
+
+def _job_out(row) -> dict:
+    data = dict(row)
+    data["payload"] = json.loads(data["payload"])
+    return data
+
+
+@router.post("/workers", response_model=WorkerOut, status_code=status.HTTP_201_CREATED)
+def register_worker(payload: WorkerRegister):
+    row = db.register_worker(
+        name=payload.name,
+        cpu_capacity=payload.cpu_capacity,
+        memory_capacity_mb=payload.memory_capacity_mb,
+    )
+    return dict(row)
+
+
+@router.get("/workers", response_model=list[WorkerOut])
+def workers():
+    return [dict(row) for row in db.list_workers()]
+
+
+@router.post("/jobs", response_model=JobOut, status_code=status.HTTP_201_CREATED)
+def create_job(payload: JobCreate):
+    row = db.create_job(
+        job_type=payload.type,
+        priority=payload.priority,
+        cpu_request=payload.cpu_request,
+        memory_request_mb=payload.memory_request_mb,
+        payload=payload.payload,
+    )
+    return _job_out(row)
+
+
+@router.get("/jobs", response_model=list[JobOut])
+def jobs():
+    return [_job_out(row) for row in db.list_jobs()]
+
+
+@router.get("/jobs/{job_id}", response_model=JobOut)
+def job_detail(job_id: str):
+    row = db.get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Diagnostic Job 不存在")
+    return _job_out(row)
 
 
 @router.get("/healthz", include_in_schema=False)

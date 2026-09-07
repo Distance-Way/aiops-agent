@@ -1,4 +1,5 @@
 import sqlite3
+import json
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -54,6 +55,36 @@ CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_tool_runs_session ON tool_runs(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at);
+
+CREATE TABLE IF NOT EXISTS workers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    cpu_capacity REAL NOT NULL,
+    memory_capacity_mb INTEGER NOT NULL,
+    last_heartbeat_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS diagnostic_jobs (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    priority TEXT NOT NULL,
+    cpu_request REAL NOT NULL,
+    memory_request_mb INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    worker_id TEXT REFERENCES workers(id),
+    result TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_workers_heartbeat ON workers(last_heartbeat_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON diagnostic_jobs(status, priority, created_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_worker ON diagnostic_jobs(worker_id, status);
 """
 
 
@@ -237,3 +268,98 @@ def add_tool_run(
             """,
             (session_id, name, json.dumps(arguments, ensure_ascii=False), output, status, duration_ms, utc_now()),
         )
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_" + uuid.uuid4().hex[:12]
+
+
+def register_worker(
+    name: str,
+    cpu_capacity: float,
+    memory_capacity_mb: int,
+) -> sqlite3.Row:
+    worker_id = _new_id("w")
+    now = utc_now()
+    with connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO workers(id, name, status, cpu_capacity, memory_capacity_mb, last_heartbeat_at, created_at)
+            VALUES (?, ?, 'active', ?, ?, ?, ?)
+            """,
+            (worker_id, name, cpu_capacity, memory_capacity_mb, now, now),
+        )
+    return get_worker(worker_id)
+
+
+def get_worker(worker_id: str) -> sqlite3.Row | None:
+    with connection() as conn:
+        return conn.execute(
+            "SELECT * FROM workers WHERE id = ?", (worker_id,)
+        ).fetchone()
+
+
+def list_workers() -> list[sqlite3.Row]:
+    with connection() as conn:
+        return conn.execute(
+            "SELECT * FROM workers ORDER BY created_at ASC"
+        ).fetchall()
+
+
+def touch_worker_heartbeat(worker_id: str) -> None:
+    with connection() as conn:
+        conn.execute(
+            "UPDATE workers SET last_heartbeat_at = ? WHERE id = ?",
+            (utc_now(), worker_id),
+        )
+
+
+def create_job(
+    job_type: str,
+    priority: str,
+    cpu_request: float,
+    memory_request_mb: int,
+    payload: dict,
+) -> sqlite3.Row:
+    job_id = _new_id("j")
+    with connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO diagnostic_jobs(
+                id, type, status, priority, cpu_request, memory_request_mb,
+                payload, created_at
+            )
+            VALUES (?, ?, 'queued', ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                job_type,
+                priority,
+                cpu_request,
+                memory_request_mb,
+                json.dumps(payload, ensure_ascii=False),
+                utc_now(),
+            ),
+        )
+    return get_job(job_id)
+
+
+def list_jobs(limit: int = 50) -> list[sqlite3.Row]:
+    with connection() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM diagnostic_jobs
+            ORDER BY
+                CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
+                created_at ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+
+def get_job(job_id: str) -> sqlite3.Row | None:
+    with connection() as conn:
+        return conn.execute(
+            "SELECT * FROM diagnostic_jobs WHERE id = ?", (job_id,)
+        ).fetchone()

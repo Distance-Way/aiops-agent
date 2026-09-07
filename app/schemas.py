@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -78,3 +78,43 @@ class ToolInfo(BaseModel):
     name: str
     description: str
     parameters: dict[str, Any]
+
+
+class WorkerRegister(BaseModel):
+    name: str = Field(default="worker", max_length=80)
+    cpu_capacity: float = Field(gt=0, le=1024)
+    memory_capacity_mb: int = Field(gt=0, le=1024 * 1024)
+
+
+class WorkerOut(BaseModel):
+    id: str
+    name: str
+    status: str
+    cpu_capacity: float
+    memory_capacity_mb: int
+    last_heartbeat_at: str
+    created_at: str
+
+
+class JobCreate(BaseModel):
+    type: Literal["system_status", "service_check", "query_logs", "log_inference"]
+    priority: Literal["high", "normal", "low"] = "normal"
+    cpu_request: float = Field(default=1.0, gt=0, le=1024)
+    memory_request_mb: int = Field(default=128, gt=0, le=1024 * 1024)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class JobOut(BaseModel):
+    id: str
+    type: str
+    status: str
+    priority: str
+    cpu_request: float
+    memory_request_mb: int
+    payload: dict[str, Any]
+    worker_id: str | None = None
+    result: str | None = None
+    error: str | None = None
+    created_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
