@@ -157,6 +157,8 @@ class MockLLM:
                 "建议：优先查看错误时间点前后的完整上下文，并结合最近发布或配置变更定位根因。"
             )
         if tool_name == "search_runbook":
+            if "知识库中暂无排障手册" in text:
+                return text
             return (
                 "已依据排障手册检索到处置步骤：\n"
                 f"{text}\n"

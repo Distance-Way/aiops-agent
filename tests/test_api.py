@@ -155,6 +155,19 @@ def test_chat_rag_runbook(client, headers, sample_runbook):
     assert "df -h" in payload["reply"]
 
 
+def test_chat_without_runbook_does_not_fabricate_steps(client, headers):
+    response = client.post(
+        "/api/chat",
+        json={"message": "磁盘满了怎么处理，请根据排障手册回答", "use_rag": True},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "暂无排障手册" in reply
+    assert "建议按手册顺序执行" not in reply
+
+
 def test_document_upload_search_delete(client, headers, sample_runbook):
     upload = client.post(
         "/api/documents",
