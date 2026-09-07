@@ -35,6 +35,7 @@ class Settings:
     rate_window_seconds: int = _env_int("RATE_WINDOW_SECONDS", 60)
     tool_output_limit: int = _env_int("TOOL_OUTPUT_LIMIT", 2000)
     tool_timeout_seconds: float = float(os.getenv("TOOL_TIMEOUT_SECONDS", "5"))
+    worker_ttl_seconds: float = float(os.getenv("WORKER_TTL_SECONDS", "60"))
     chunk_size: int = _env_int("CHUNK_SIZE", 400)
     chunk_overlap: int = _env_int("CHUNK_OVERLAP", 60)
 

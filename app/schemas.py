@@ -118,3 +118,10 @@ class JobOut(BaseModel):
     created_at: str
     started_at: str | None = None
     finished_at: str | None = None
+
+
+class JobComplete(BaseModel):
+    job_id: str
+    status: Literal["succeeded", "failed"]
+    result: str | None = None
+    error: str | None = None

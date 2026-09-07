@@ -2,12 +2,13 @@ import json
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from app import db
+from app import db, scheduling
 from app.rag import RagService
 from app.schemas import (
     ChatRequest,
     ChatResponse,
     DocumentOut,
+    JobComplete,
     JobCreate,
     JobOut,
     MessageOut,
@@ -39,6 +40,38 @@ def register_worker(payload: WorkerRegister):
         memory_capacity_mb=payload.memory_capacity_mb,
     )
     return dict(row)
+
+
+@router.post("/workers/{worker_id}/heartbeat", response_model=WorkerOut)
+def worker_heartbeat(worker_id: str):
+    if not db.get_worker(worker_id):
+        raise HTTPException(status_code=404, detail="Worker 不存在")
+    db.touch_worker_heartbeat(worker_id)
+    return dict(db.get_worker(worker_id))
+
+
+@router.post("/workers/{worker_id}/claim", response_model=JobOut | None)
+def worker_claim(worker_id: str):
+    if not db.get_worker(worker_id):
+        raise HTTPException(status_code=404, detail="Worker 不存在")
+    job = scheduling.claim_next_job(worker_id)
+    return _job_out(job) if job else None
+
+
+@router.post("/workers/{worker_id}/complete", response_model=JobOut)
+def worker_complete(worker_id: str, payload: JobComplete):
+    job = db.get_job(payload.job_id)
+    if not job or job["worker_id"] != worker_id:
+        raise HTTPException(status_code=404, detail="Diagnostic Job 不存在")
+    if not db.complete_job(
+        job_id=payload.job_id,
+        worker_id=worker_id,
+        status=payload.status,
+        result=payload.result,
+        error=payload.error,
+    ):
+        raise HTTPException(status_code=409, detail="Diagnostic Job 当前不可完成")
+    return _job_out(db.get_job(payload.job_id))
 
 
 @router.get("/workers", response_model=list[WorkerOut])

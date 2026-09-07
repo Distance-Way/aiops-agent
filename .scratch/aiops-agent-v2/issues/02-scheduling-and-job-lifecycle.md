@@ -4,10 +4,14 @@
 
 **Blocked by:** 01 — Worker and Diagnostic Job API
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Claim returns the next fitting job ordered by priority then creation time.
-- [ ] Claimed jobs transition to running and reserve capacity.
-- [ ] Completion succeeds or fails the job and releases capacity.
-- [ ] No Worker claim does not fail queued jobs.
-- [ ] Heartbeat marks Workers stale so they are not selected.
+- [x] Claim returns the next fitting job ordered by priority then creation time.
+- [x] Claimed jobs transition to running and reserve capacity.
+- [x] Completion succeeds or fails the job and releases capacity.
+- [x] No Worker claim does not fail queued jobs.
+- [x] Heartbeat marks Workers stale so they are not selected.
+
+## Answer
+
+Implemented HTTP heartbeat, claim and complete endpoints backed by a capacity-aware scheduler; queue ordering, resource reservation/release and stale-worker behavior are covered by API tests.

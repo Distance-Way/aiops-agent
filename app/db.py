@@ -306,12 +306,79 @@ def list_workers() -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def list_queued_jobs() -> list[sqlite3.Row]:
+    with connection() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM diagnostic_jobs
+            WHERE status = 'queued'
+            ORDER BY
+                CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
+                rowid ASC
+            """
+        ).fetchall()
+
+
+def worker_used_capacity(worker_id: str) -> tuple[float, int]:
+    with connection() as conn:
+        row = conn.execute(
+            """
+            SELECT COALESCE(SUM(cpu_request), 0) AS cpu,
+                   COALESCE(SUM(memory_request_mb), 0) AS memory
+            FROM diagnostic_jobs
+            WHERE status = 'running' AND worker_id = ?
+            """,
+            (worker_id,),
+        ).fetchone()
+    return float(row["cpu"]), int(row["memory"])
+
+
 def touch_worker_heartbeat(worker_id: str) -> None:
     with connection() as conn:
         conn.execute(
             "UPDATE workers SET last_heartbeat_at = ? WHERE id = ?",
             (utc_now(), worker_id),
         )
+
+
+def set_worker_heartbeat(worker_id: str, heartbeat_at: str) -> None:
+    with connection() as conn:
+        conn.execute(
+            "UPDATE workers SET last_heartbeat_at = ? WHERE id = ?",
+            (heartbeat_at, worker_id),
+        )
+
+
+def claim_job(job_id: str, worker_id: str, started_at: str) -> bool:
+    with connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE diagnostic_jobs
+            SET status = 'running', worker_id = ?, started_at = ?
+            WHERE id = ? AND status = 'queued'
+            """,
+            (worker_id, started_at, job_id),
+        )
+        return cursor.rowcount > 0
+
+
+def complete_job(
+    job_id: str,
+    worker_id: str,
+    status: str,
+    result: str | None,
+    error: str | None,
+) -> bool:
+    with connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE diagnostic_jobs
+            SET status = ?, result = ?, error = ?, finished_at = ?
+            WHERE id = ? AND worker_id = ? AND status = 'running'
+            """,
+            (status, result, error, utc_now(), job_id, worker_id),
+        )
+        return cursor.rowcount > 0
 
 
 def create_job(
@@ -351,7 +418,7 @@ def list_jobs(limit: int = 50) -> list[sqlite3.Row]:
             SELECT * FROM diagnostic_jobs
             ORDER BY
                 CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-                created_at ASC
+                rowid ASC
             LIMIT ?
             """,
             (limit,),
